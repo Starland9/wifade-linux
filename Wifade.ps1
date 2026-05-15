@@ -1,12 +1,12 @@
 #!/usr/bin/env pwsh
 <#
 .SYNOPSIS
-    wifade - Windows PowerShell Wi-Fi Security Testing Tool
-    
+    wifade - Cross-Platform PowerShell Wi-Fi Security Testing Tool
+
 .DESCRIPTION
     A PowerShell implementation of the Wifade Wi-Fi password brute-forcing tool
-    designed for ethical security testing on Windows systems.
-    
+    designed for ethical security testing on Windows and Linux systems.
+
 .PARAMETER Help
     Display help information
     
@@ -52,7 +52,7 @@ param(
     
     [Parameter(Mandatory = $false, HelpMessage = "Path to password file")]
     [Alias("w")]
-    [string]$PasswordFile = "passwords\probable-v2-wpa-top4800.txt",
+    [string]$PasswordFile = ([IO.Path]::Combine("passwords", "probable-v2-wpa-top4800.txt")),
     
     [Parameter(Mandatory = $false, HelpMessage = "Display help information")]
     [Alias("h")]
@@ -189,78 +189,153 @@ else {
 
 
 
-# Establish application root path - HARDCODED for reliable operation
-# Since we enforce installation to C:\Program Files\Wifade, use that as primary path
-$global:AppRoot = "C:\Program Files\Wifade"
+# Establish application root path - Cross-platform compatible
+# Detect the OS and set appropriate default installation path
+$isWindowsOS = [System.Environment]::OSVersion.Platform -eq [System.PlatformID]::Win32NT
 
-# For development/testing, fall back to script location if hardcoded path doesn't exist
-if (-not (Test-Path "$global:AppRoot\Classes")) {
-    Write-Verbose "[DEBUG] Hardcoded path not found, trying script-based paths for development..."
-    
-    if ($PSScriptRoot -and (Test-Path "$PSScriptRoot\Classes")) {
-        $global:AppRoot = $PSScriptRoot
-        Write-Verbose "[DEBUG] Using PSScriptRoot: '$global:AppRoot'"
-    } elseif ($MyInvocation.MyCommand.Path) {
-        $tempPath = Split-Path -Parent $MyInvocation.MyCommand.Path
-        if (Test-Path "$tempPath\Classes") {
-            $global:AppRoot = $tempPath
-            Write-Verbose "[DEBUG] Using MyInvocation path: '$global:AppRoot'"
-        }
+if ($isWindowsOS) {
+    # Windows: C:\Program Files\Wifade or user profile
+    $global:AppRoot = [IO.Path]::Combine("C:", "Program Files", "Wifade")
+} else {
+    # Linux/Unix: /opt/wifade or ~/.local/share/wifade
+    if (Test-Path "/opt/wifade") {
+        $global:AppRoot = "/opt/wifade"
     } else {
+        $global:AppRoot = [IO.Path]::Combine($env:HOME, ".local", "share", "wifade")
+    }
+}
+
+# For development/testing, fall back to script location if installation path doesn't exist
+$classesPath = [IO.Path]::Combine($global:AppRoot, "Classes")
+if (-not (Test-Path $classesPath)) {
+    Write-Verbose "[DEBUG] Installation path not found, trying script-based paths for development..."
+
+    if ($PSScriptRoot) {
+        $devClassesPath = [IO.Path]::Combine($PSScriptRoot, "Classes")
+        if (Test-Path $devClassesPath) {
+            $global:AppRoot = $PSScriptRoot
+            Write-Verbose "[DEBUG] Using PSScriptRoot: '$global:AppRoot'"
+        }
+    }
+
+    if (-not $global:AppRoot -or -not (Test-Path ([IO.Path]::Combine($global:AppRoot, "Classes")))) {
+        if ($MyInvocation.MyCommand.Path) {
+            $tempPath = Split-Path -Parent $MyInvocation.MyCommand.Path
+            $tempClassesPath = [IO.Path]::Combine($tempPath, "Classes")
+            if (Test-Path $tempClassesPath) {
+                $global:AppRoot = $tempPath
+                Write-Verbose "[DEBUG] Using MyInvocation path: '$global:AppRoot'"
+            }
+        }
+    }
+
+    if (-not $global:AppRoot -or -not (Test-Path ([IO.Path]::Combine($global:AppRoot, "Classes")))) {
         # Final fallback for development
         $currentPath = (Get-Location).Path
-        if (Test-Path "$currentPath\Classes") {
+        $currentClassesPath = [IO.Path]::Combine($currentPath, "Classes")
+        if (Test-Path $currentClassesPath) {
             $global:AppRoot = $currentPath
             Write-Verbose "[DEBUG] Using current directory: '$global:AppRoot'"
         }
     }
 } else {
-    Write-Verbose "[DEBUG] Using hardcoded installation path: '$global:AppRoot'"
+    Write-Verbose "[DEBUG] Using installation path: '$global:AppRoot'"
 }
-
-# Clean up the path
-$global:AppRoot = $global:AppRoot.TrimEnd('\').TrimEnd('/')
 
 Write-Verbose "[DEBUG] Final AppRoot resolved to: '$global:AppRoot'"
 
 # Validate that we can find the Classes directory
-if (-not (Test-Path "$global:AppRoot\Classes")) {
-    Write-Host "[ERROR] Classes directory not found at '$global:AppRoot\Classes'" -ForegroundColor Red
-    Write-Host "[DEBUG] Expected installation path: C:\Program Files\Wifade" -ForegroundColor Yellow
+$finalClassesPath = [IO.Path]::Combine($global:AppRoot, "Classes")
+if (-not (Test-Path $finalClassesPath)) {
+    Write-Host "[ERROR] Classes directory not found at '$finalClassesPath'" -ForegroundColor Red
+    if ($isWindowsOS) {
+        Write-Host "[DEBUG] Expected installation path: C:\Program Files\Wifade" -ForegroundColor Yellow
+    } else {
+        Write-Host "[DEBUG] Expected installation paths: /opt/wifade or ~/.local/share/wifade" -ForegroundColor Yellow
+    }
     Write-Host "[DEBUG] Please ensure Wifade is properly installed or run from source directory" -ForegroundColor Yellow
     throw "Classes directory not found. AppRoot was resolved to: '$global:AppRoot'"
 }
 
-# Import required classes and modules using the new global path
-. "$global:AppRoot\Classes\BaseClasses.ps1"
-. "$global:AppRoot\Classes\DataModels.ps1"
-. "$global:AppRoot\Classes\ConfigurationManager.ps1"
-. "$global:AppRoot\Classes\NetworkManager.ps1"
-. "$global:AppRoot\Classes\PasswordManager.ps1"
-. "$global:AppRoot\Classes\SettingsManager.ps1"
-. "$global:AppRoot\Classes\UIManager.ps1"
-. "$global:AppRoot\Classes\VersionChecker.ps1"
-. "$global:AppRoot\Classes\ApplicationController.ps1"
+# Import required classes and modules using cross-platform paths
+# Note: VersionChecker must be loaded first to define $Script:WIFADE_VERSION
+. ([IO.Path]::Combine($global:AppRoot, "Classes", "VersionChecker.ps1"))
+. ([IO.Path]::Combine($global:AppRoot, "Classes", "BaseClasses.ps1"))
+. ([IO.Path]::Combine($global:AppRoot, "Classes", "DataModels.ps1"))
+. ([IO.Path]::Combine($global:AppRoot, "Classes", "ConfigurationManager.ps1"))
+. ([IO.Path]::Combine($global:AppRoot, "Classes", "NetworkManager.ps1"))
+. ([IO.Path]::Combine($global:AppRoot, "Classes", "PasswordManager.ps1"))
+. ([IO.Path]::Combine($global:AppRoot, "Classes", "SettingsManager.ps1"))
+. ([IO.Path]::Combine($global:AppRoot, "Classes", "UIManager.ps1"))
+. ([IO.Path]::Combine($global:AppRoot, "Classes", "ApplicationController.ps1"))
 
-# Application constants
+# Application constants (now that version is loaded)
 $Script:APP_NAME = "wifade"
 $Script:APP_VERSION = $Script:WIFADE_VERSION  # Use version from VersionChecker
-$Script:APP_DESCRIPTION = "Windows PowerShell Wi-Fi Security Testing Tool"
+$Script:APP_DESCRIPTION = "Cross-Platform PowerShell Wi-Fi Security Testing Tool (Windows/Linux)"
 
 function Get-WiFiPrivateIP {
     <#
     .SYNOPSIS
-        Get the current Wi-Fi private IP address
+        Get the current Wi-Fi private IP address (cross-platform)
     #>
-    
+
     try {
-        # Get Wi-Fi adapter IP configuration
-        $ipConfig = Get-NetIPConfiguration -InterfaceAlias "Wi-Fi*" -ErrorAction SilentlyContinue | Where-Object { $_.IPv4Address -and $_.NetProfile.IPv4Connectivity -eq "Internet" } | Select-Object -First 1
-        
-        if ($ipConfig -and $ipConfig.IPv4Address) {
-            return $ipConfig.IPv4Address.IPAddress
+        $isWindowsOS = [System.Environment]::OSVersion.Platform -eq [System.PlatformID]::Win32NT
+
+        if ($isWindowsOS) {
+            # Windows: Use Get-NetIPConfiguration
+            $ipConfig = Get-NetIPConfiguration -InterfaceAlias "Wi-Fi*" -ErrorAction SilentlyContinue | Where-Object { $_.IPv4Address -and $_.NetProfile.IPv4Connectivity -eq "Internet" } | Select-Object -First 1
+
+            if ($ipConfig -and $ipConfig.IPv4Address) {
+                return $ipConfig.IPv4Address.IPAddress
+            }
+            return $null
         }
         else {
+            # Linux: Use ip command or parse /proc/net files
+            # Try to find wireless interface
+            $wifiInterface = $null
+
+            # Method 1: Check /proc/net/wireless
+            if (Test-Path "/proc/net/wireless") {
+                $wirelessContent = Get-Content "/proc/net/wireless" -ErrorAction SilentlyContinue
+                foreach ($line in $wirelessContent) {
+                    if ($line -match '^\s*(\w+)\:') {
+                        $interfaceName = $matches[1].Trim()
+                        if ($interfaceName -ne "Inter" -and $interfaceName -ne "face") {
+                            $wifiInterface = $interfaceName
+                            break
+                        }
+                    }
+                }
+            }
+
+            # Method 2: Use ip command if available
+            if (-not $wifiInterface) {
+                $ipOutput = & ip link show 2>$null
+                if ($ipOutput) {
+                    foreach ($line in $ipOutput) {
+                        if ($line -match '^\d+\:\s*(\w+)\:' -and $matches[1] -match "^(wlan|wlp|wlo|wifi)") {
+                            $wifiInterface = $matches[1]
+                            break
+                        }
+                    }
+                }
+            }
+
+            if ($wifiInterface) {
+                # Get IP address for the interface
+                $ipAddrOutput = & ip -4 addr show $wifiInterface 2>$null
+                if ($ipAddrOutput) {
+                    foreach ($line in $ipAddrOutput) {
+                        if ($line -match 'inet\s+(\d+\.\d+\.\d+\.\d+)') {
+                            return $matches[1]
+                        }
+                    }
+                }
+            }
+
             return $null
         }
     }
@@ -287,16 +362,32 @@ function Get-WiFiPublicIP {
 function Get-WiFiGateway {
     <#
     .SYNOPSIS
-        Get the default gateway IP address
+        Get the default gateway IP address (cross-platform)
     #>
-    
+
     try {
-        $ipConfig = Get-NetIPConfiguration -InterfaceAlias "Wi-Fi*" -ErrorAction SilentlyContinue | Where-Object { $_.IPv4Address -and $_.NetProfile.IPv4Connectivity -eq "Internet" } | Select-Object -First 1
-        
-        if ($ipConfig -and $ipConfig.IPv4DefaultGateway) {
-            return $ipConfig.IPv4DefaultGateway.NextHop
+        $isWindowsOS = [System.Environment]::OSVersion.Platform -eq [System.PlatformID]::Win32NT
+
+        if ($isWindowsOS) {
+            # Windows: Use Get-NetIPConfiguration
+            $ipConfig = Get-NetIPConfiguration -InterfaceAlias "Wi-Fi*" -ErrorAction SilentlyContinue | Where-Object { $_.IPv4Address -and $_.NetProfile.IPv4Connectivity -eq "Internet" } | Select-Object -First 1
+
+            if ($ipConfig -and $ipConfig.IPv4DefaultGateway) {
+                return $ipConfig.IPv4DefaultGateway.NextHop
+            }
+            return $null
         }
         else {
+            # Linux: Use ip route command
+            $routeOutput = & ip route show default 2>$null
+            if ($routeOutput) {
+                # Parse default route line: "default via 192.168.1.1 dev wlan0 ..."
+                foreach ($line in $routeOutput) {
+                    if ($line -match 'default\s+via\s+(\d+\.\d+\.\d+\.\d+)') {
+                        return $matches[1]
+                    }
+                }
+            }
             return $null
         }
     }
@@ -308,19 +399,60 @@ function Get-WiFiGateway {
 function Get-WiFiDNS {
     <#
     .SYNOPSIS
-        Get the DNS servers
+        Get the DNS servers (cross-platform)
     #>
-    
+
     try {
-        $ipConfig = Get-NetIPConfiguration -InterfaceAlias "Wi-Fi*" -ErrorAction SilentlyContinue | Where-Object { $_.IPv4Address -and $_.NetProfile.IPv4Connectivity -eq "Internet" } | Select-Object -First 1
-        
-        if ($ipConfig -and $ipConfig.DNSServer) {
-            $dnsServers = $ipConfig.DNSServer | Where-Object { $_.AddressFamily -eq 2 } | Select-Object -ExpandProperty ServerAddresses
-            if ($dnsServers) {
+        $isWindowsOS = [System.Environment]::OSVersion.Platform -eq [System.PlatformID]::Win32NT
+
+        if ($isWindowsOS) {
+            # Windows: Use Get-NetIPConfiguration
+            $ipConfig = Get-NetIPConfiguration -InterfaceAlias "Wi-Fi*" -ErrorAction SilentlyContinue | Where-Object { $_.IPv4Address -and $_.NetProfile.IPv4Connectivity -eq "Internet" } | Select-Object -First 1
+
+            if ($ipConfig -and $ipConfig.DNSServer) {
+                $dnsServers = $ipConfig.DNSServer | Where-Object { $_.AddressFamily -eq 2 } | Select-Object -ExpandProperty ServerAddresses
+                if ($dnsServers) {
+                    return $dnsServers -join ', '
+                }
+            }
+            return $null
+        }
+        else {
+            # Linux: Parse /etc/resolv.conf or use systemd-resolve
+            $dnsServers = @()
+
+            # Method 1: Check /etc/resolv.conf
+            if (Test-Path "/etc/resolv.conf") {
+                $resolvContent = Get-Content "/etc/resolv.conf" -ErrorAction SilentlyContinue
+                foreach ($line in $resolvContent) {
+                    if ($line -match '^\s*nameserver\s+(\d+\.\d+\.\d+\.\d+)') {
+                        $dnsServers += $matches[1]
+                    }
+                }
+            }
+
+            # Method 2: Try systemd-resolve (if available)
+            if ($dnsServers.Count -eq 0) {
+                try {
+                    $resolveOutput = & systemd-resolve --status 2>$null
+                    if ($resolveOutput) {
+                        foreach ($line in $resolveOutput) {
+                            if ($line -match 'DNS Servers:\s+(\d+\.\d+\.\d+\.\d+)') {
+                                $dnsServers += $matches[1]
+                            }
+                        }
+                    }
+                }
+                catch {
+                    # systemd-resolve not available
+                }
+            }
+
+            if ($dnsServers.Count -gt 0) {
                 return $dnsServers -join ', '
             }
+            return $null
         }
-        return $null
     }
     catch {
         return $null
@@ -330,15 +462,58 @@ function Get-WiFiDNS {
 function Get-WiFiMAC {
     <#
     .SYNOPSIS
-        Get the Wi-Fi adapter MAC address
+        Get the Wi-Fi adapter MAC address (cross-platform)
     #>
-    
+
     try {
-        $adapter = Get-NetAdapter -InterfaceAlias "Wi-Fi*" | Where-Object { $_.Status -eq "Up" } | Select-Object -First 1
-        if ($adapter) {
-            return $adapter.MacAddress
+        $isWindowsOS = [System.Environment]::OSVersion.Platform -eq [System.PlatformID]::Win32NT
+
+        if ($isWindowsOS) {
+            # Windows: Use Get-NetAdapter
+            $adapter = Get-NetAdapter -InterfaceAlias "Wi-Fi*" | Where-Object { $_.Status -eq "Up" } | Select-Object -First 1
+            if ($adapter) {
+                return $adapter.MacAddress
+            }
+            return $null
         }
-        return $null
+        else {
+            # Linux: Find wireless interface and get MAC
+            $wifiInterface = $null
+
+            # Find wireless interface
+            if (Test-Path "/proc/net/wireless") {
+                $wirelessContent = Get-Content "/proc/net/wireless" -ErrorAction SilentlyContinue
+                foreach ($line in $wirelessContent) {
+                    if ($line -match '^\s*(\w+)\:') {
+                        $interfaceName = $matches[1].Trim()
+                        if ($interfaceName -ne "Inter" -and $interfaceName -ne "face") {
+                            $wifiInterface = $interfaceName
+                            break
+                        }
+                    }
+                }
+            }
+
+            if ($wifiInterface) {
+                # Get MAC address from ip command or /sys
+                $macFile = "/sys/class/net/$wifiInterface/address"
+                if (Test-Path $macFile) {
+                    $mac = Get-Content $macFile -ErrorAction SilentlyContinue
+                    return $mac.Trim()
+                }
+
+                # Fallback: Use ip command
+                $ipOutput = & ip link show $wifiInterface 2>$null
+                if ($ipOutput) {
+                    foreach ($line in $ipOutput) {
+                        if ($line -match 'link/ether\s+([0-9a-f:]{17})') {
+                            return $matches[1]
+                        }
+                    }
+                }
+            }
+            return $null
+        }
     }
     catch {
         return $null
@@ -348,15 +523,70 @@ function Get-WiFiMAC {
 function Get-WiFiSpeed {
     <#
     .SYNOPSIS
-        Get the Wi-Fi connection speed
+        Get the Wi-Fi connection speed (cross-platform)
     #>
-    
+
     try {
-        $adapter = Get-NetAdapter -InterfaceAlias "Wi-Fi*" | Where-Object { $_.Status -eq "Up" } | Select-Object -First 1
-        if ($adapter) {
-            return $adapter.LinkSpeed
+        $isWindowsOS = [System.Environment]::OSVersion.Platform -eq [System.PlatformID]::Win32NT
+
+        if ($isWindowsOS) {
+            # Windows: Use Get-NetAdapter
+            $adapter = Get-NetAdapter -InterfaceAlias "Wi-Fi*" | Where-Object { $_.Status -eq "Up" } | Select-Object -First 1
+            if ($adapter) {
+                return $adapter.LinkSpeed
+            }
+            return $null
         }
-        return $null
+        else {
+            # Linux: Use iwconfig or /sys to get link speed
+            $wifiInterface = $null
+
+            # Find wireless interface
+            if (Test-Path "/proc/net/wireless") {
+                $wirelessContent = Get-Content "/proc/net/wireless" -ErrorAction SilentlyContinue
+                foreach ($line in $wirelessContent) {
+                    if ($line -match '^\s*(\w+)\:') {
+                        $interfaceName = $matches[1].Trim()
+                        if ($interfaceName -ne "Inter" -and $interfaceName -ne "face") {
+                            $wifiInterface = $interfaceName
+                            break
+                        }
+                    }
+                }
+            }
+
+            if ($wifiInterface) {
+                # Try iwconfig first (more accurate for Wi-Fi)
+                try {
+                    $iwconfigOutput = & iwconfig $wifiInterface 2>$null
+                    if ($iwconfigOutput) {
+                        foreach ($line in $iwconfigOutput) {
+                            if ($line -match 'Bit Rate[=:](\d+\.?\d*)\s*(Mb/s|Gb/s)') {
+                                $speed = $matches[1]
+                                $unit = $matches[2]
+                                if ($unit -eq "Gb/s") {
+                                    $speed = [double]$speed * 1000
+                                }
+                                return "$speed Mbps"
+                            }
+                        }
+                    }
+                }
+                catch {
+                    # iwconfig not available
+                }
+
+                # Fallback: Check /sys/class/net/*/speed
+                $speedFile = "/sys/class/net/$wifiInterface/speed"
+                if (Test-Path $speedFile) {
+                    $speed = Get-Content $speedFile -ErrorAction SilentlyContinue
+                    if ($speed -and $speed -ne "-1") {
+                        return "$speed Mbps"
+                    }
+                }
+            }
+            return $null
+        }
     }
     catch {
         return $null
@@ -563,39 +793,82 @@ function Get-WiFiNetworks {
 function Restart-WiFiAdapter {
     <#
     .SYNOPSIS
-        Restart the Wi-Fi adapter
+        Restart the Wi-Fi adapter (cross-platform)
     #>
-    
+
     try {
         Write-Host "Restarting Wi-Fi adapter..." -ForegroundColor Yellow
-        
-        # Get Wi-Fi adapter
-        $adapter = Get-NetAdapter -InterfaceAlias "Wi-Fi*" | Where-Object { $_.Status -eq "Up" } | Select-Object -First 1
-        if (-not $adapter) {
-            Write-Host "No active Wi-Fi adapter found" -ForegroundColor Red
-            return $false
+
+        $isWindowsOS = [System.Environment]::OSVersion.Platform -eq [System.PlatformID]::Win32NT
+
+        if ($isWindowsOS) {
+            # Windows: Use Get-NetAdapter
+            $adapter = Get-NetAdapter -InterfaceAlias "Wi-Fi*" | Where-Object { $_.Status -eq "Up" } | Select-Object -First 1
+            if (-not $adapter) {
+                Write-Host "No active Wi-Fi adapter found" -ForegroundColor Red
+                return $false
+            }
+
+            $adapterName = $adapter.Name
+            Write-Host "Found adapter: $adapterName" -ForegroundColor Green
+
+            # Try to restart using different methods
+            try {
+                Disable-NetAdapter -Name $adapterName -Confirm:$false -ErrorAction Stop
+                Start-Sleep -Seconds 3
+                Enable-NetAdapter -Name $adapterName -Confirm:$false -ErrorAction Stop
+                Start-Sleep -Seconds 5
+                Write-Host "Wi-Fi adapter restarted successfully" -ForegroundColor Green
+                return $true
+            }
+            catch {
+                Write-Host "Admin privileges required. Trying alternative method..." -ForegroundColor Yellow
+                & netsh interface set interface name="$adapterName" admin=disabled 2>&1 | Out-Null
+                Start-Sleep -Seconds 3
+                & netsh interface set interface name="$adapterName" admin=enabled 2>&1 | Out-Null
+                Start-Sleep -Seconds 5
+                Write-Host "Wi-Fi adapter restart attempted" -ForegroundColor Green
+                return $true
+            }
         }
-        
-        $adapterName = $adapter.Name
-        Write-Host "Found adapter: $adapterName" -ForegroundColor Green
-        
-        # Try to restart using different methods
-        try {
-            Disable-NetAdapter -Name $adapterName -Confirm:$false -ErrorAction Stop
-            Start-Sleep -Seconds 3
-            Enable-NetAdapter -Name $adapterName -Confirm:$false -ErrorAction Stop
-            Start-Sleep -Seconds 5
-            Write-Host "Wi-Fi adapter restarted successfully" -ForegroundColor Green
-            return $true
-        }
-        catch {
-            Write-Host "Admin privileges required. Trying alternative method..." -ForegroundColor Yellow
-            & netsh interface set interface name="$adapterName" admin=disabled 2>&1 | Out-Null
-            Start-Sleep -Seconds 3
-            & netsh interface set interface name="$adapterName" admin=enabled 2>&1 | Out-Null
-            Start-Sleep -Seconds 5
-            Write-Host "Wi-Fi adapter restart attempted" -ForegroundColor Green
-            return $true
+        else {
+            # Linux: Find wireless interface and restart
+            $wifiInterface = $null
+
+            # Find wireless interface
+            if (Test-Path "/proc/net/wireless") {
+                $wirelessContent = Get-Content "/proc/net/wireless" -ErrorAction SilentlyContinue
+                foreach ($line in $wirelessContent) {
+                    if ($line -match '^\s*(\w+)\:') {
+                        $interfaceName = $matches[1].Trim()
+                        if ($interfaceName -ne "Inter" -and $interfaceName -ne "face") {
+                            $wifiInterface = $interfaceName
+                            break
+                        }
+                    }
+                }
+            }
+
+            if (-not $wifiInterface) {
+                Write-Host "No active Wi-Fi interface found" -ForegroundColor Red
+                return $false
+            }
+
+            Write-Host "Found interface: $wifiInterface" -ForegroundColor Green
+
+            # Try using ip command
+            try {
+                & ip link set $wifiInterface down 2>&1 | Out-Null
+                Start-Sleep -Seconds 3
+                & ip link set $wifiInterface up 2>&1 | Out-Null
+                Start-Sleep -Seconds 5
+                Write-Host "Wi-Fi interface restarted successfully" -ForegroundColor Green
+                return $true
+            }
+            catch {
+                Write-Host "Failed to restart interface. You may need elevated privileges (sudo)" -ForegroundColor Red
+                return $false
+            }
         }
     }
     catch {
@@ -807,7 +1080,7 @@ function Show-ParameterList {
     Write-Host "📚 BUILT-IN WORDLIST:" -ForegroundColor Blue
     Write-Host "│   " -ForegroundColor Red -NoNewline
     Write-Host "Default wordlist: " -ForegroundColor White -NoNewline
-    Write-Host "passwords\probable-v2-wpa-top4800.txt" -ForegroundColor Red -NoNewline
+    Write-Host ([IO.Path]::Combine("passwords", "probable-v2-wpa-top4800.txt")) -ForegroundColor Red -NoNewline
     Write-Host " (4700+ common passwords)" -ForegroundColor White
     Write-Host "│   " -ForegroundColor Red -NoNewline
     Write-Host "Custom wordlists can be selected through the interactive Attack Mode menu" -ForegroundColor White
@@ -989,7 +1262,7 @@ function Show-Help {
     Write-Host "📚 BUILT-IN WORDLIST:" -ForegroundColor Blue
     Write-Host "│    " -ForegroundColor Red -NoNewline
     Write-Host "Default wordlist: " -ForegroundColor White -NoNewline
-    Write-Host "passwords\probable-v2-wpa-top4800.txt" -ForegroundColor Red
+    Write-Host ([IO.Path]::Combine("passwords", "probable-v2-wpa-top4800.txt")) -ForegroundColor Red
     Write-Host "│    " -ForegroundColor Red -NoNewline
     Write-Host "Contains 4700+ most common Wi-Fi passwords for effective dictionary attacks" -ForegroundColor White
     Write-Host "│" -ForegroundColor Red
@@ -1064,11 +1337,13 @@ function Show-Help {
     Write-Host "│ " -ForegroundColor Red -NoNewline
     Write-Host "💻 SYSTEM REQUIREMENTS:" -ForegroundColor Blue
     Write-Host "│    " -ForegroundColor Red -NoNewline
-    Write-Host "- Windows 10/11 or Linux/MacOS(Coming soon)" -ForegroundColor White
+    Write-Host "- Windows 10/11, Linux (Ubuntu/RHEL/Debian), or macOS (coming soon)" -ForegroundColor White
     Write-Host "│    " -ForegroundColor Red -NoNewline
-    Write-Host "- PowerShell PowerShell 7.x" -ForegroundColor White
+    Write-Host "- PowerShell Core 7.x (pwsh)" -ForegroundColor White
     Write-Host "│    " -ForegroundColor Red -NoNewline
-    Write-Host "- Administrator privileges (recommended)" -ForegroundColor White
+    Write-Host "- Administrator/sudo privileges (recommended for full functionality)" -ForegroundColor White
+    Write-Host "│    " -ForegroundColor Red -NoNewline
+    Write-Host "- Linux: requires ip, iwconfig commands for wireless management" -ForegroundColor White
     Write-Host "│" -ForegroundColor Red
     
     # Footer

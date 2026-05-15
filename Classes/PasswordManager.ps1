@@ -117,12 +117,24 @@ class PasswordManager : IManager {
 
             $resolvedPath = $null
             
-            # Primary approach: Use hardcoded installation path since we enforce installation to C:\Program Files\Wifade
-            $hardcodedAppRoot = "C:\Program Files\Wifade"
-            $potentialHardcodedPath = Join-Path $hardcodedAppRoot $filePath
-            if (Test-Path $potentialHardcodedPath) {
-                $resolvedPath = $potentialHardcodedPath
-                Write-Verbose "Path resolved using hardcoded installation path: '$resolvedPath'"
+            # Primary approach: Use cross-platform installation path
+            $isWindowsOS = [System.Environment]::OSVersion.Platform -eq [System.PlatformID]::Win32NT
+
+            if ($isWindowsOS) {
+                $defaultAppRoot = [IO.Path]::Combine("C:", "Program Files", "Wifade")
+            } else {
+                # Linux: Try /opt/wifade first, then ~/.local/share/wifade
+                if (Test-Path "/opt/wifade") {
+                    $defaultAppRoot = "/opt/wifade"
+                } else {
+                    $defaultAppRoot = [IO.Path]::Combine($env:HOME, ".local", "share", "wifade")
+                }
+            }
+
+            $potentialDefaultPath = [IO.Path]::Combine($defaultAppRoot, $filePath)
+            if (Test-Path $potentialDefaultPath) {
+                $resolvedPath = $potentialDefaultPath
+                Write-Verbose "Path resolved using installation path: '$resolvedPath'"
             }
             
             # Fallback 1: Check if the path is already absolute
