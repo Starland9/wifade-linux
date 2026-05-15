@@ -1,12 +1,12 @@
 #!/usr/bin/env pwsh
 <#
 .SYNOPSIS
-    wifade - Windows PowerShell Wi-Fi Security Testing Tool
-    
+    wifade - Cross-Platform PowerShell Wi-Fi Security Testing Tool
+
 .DESCRIPTION
     A PowerShell implementation of the Wifade Wi-Fi password brute-forcing tool
-    designed for ethical security testing on Windows systems.
-    
+    designed for ethical security testing on Windows and Linux systems.
+
 .PARAMETER Help
     Display help information
     
@@ -271,7 +271,7 @@ if (-not (Test-Path $finalClassesPath)) {
 # Application constants
 $Script:APP_NAME = "wifade"
 $Script:APP_VERSION = $Script:WIFADE_VERSION  # Use version from VersionChecker
-$Script:APP_DESCRIPTION = "Windows PowerShell Wi-Fi Security Testing Tool"
+$Script:APP_DESCRIPTION = "Cross-Platform PowerShell Wi-Fi Security Testing Tool (Windows/Linux)"
 
 function Get-WiFiPrivateIP {
     <#
@@ -1336,11 +1336,13 @@ function Show-Help {
     Write-Host "│ " -ForegroundColor Red -NoNewline
     Write-Host "💻 SYSTEM REQUIREMENTS:" -ForegroundColor Blue
     Write-Host "│    " -ForegroundColor Red -NoNewline
-    Write-Host "- Windows 10/11 or Linux/MacOS(Coming soon)" -ForegroundColor White
+    Write-Host "- Windows 10/11, Linux (Ubuntu/RHEL/Debian), or macOS (coming soon)" -ForegroundColor White
     Write-Host "│    " -ForegroundColor Red -NoNewline
-    Write-Host "- PowerShell PowerShell 7.x" -ForegroundColor White
+    Write-Host "- PowerShell Core 7.x (pwsh)" -ForegroundColor White
     Write-Host "│    " -ForegroundColor Red -NoNewline
-    Write-Host "- Administrator privileges (recommended)" -ForegroundColor White
+    Write-Host "- Administrator/sudo privileges (recommended for full functionality)" -ForegroundColor White
+    Write-Host "│    " -ForegroundColor Red -NoNewline
+    Write-Host "- Linux: requires ip, iwconfig commands for wireless management" -ForegroundColor White
     Write-Host "│" -ForegroundColor Red
     
     # Footer

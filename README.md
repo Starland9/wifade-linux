@@ -24,7 +24,7 @@
 
 **Command-Line WiFi Manager with Integrated Brute-Forcer.**
 
-_Linux and macOS support coming soon!_
+_Cross-platform support: Windows and Linux!_
 
 
 <img src="img/icon.png" style="width: 220px; height: auto;" >
@@ -45,7 +45,7 @@ _Linux and macOS support coming soon!_
 
 ## `>_` 🚀 Features
 
-Wifade is a modern, terminal-based WiFi manager with an integrated brute-forcer for Windows (Linux/macOS support coming soon). It offers:
+Wifade is a modern, terminal-based WiFi manager with an integrated brute-forcer for Windows and Linux. It offers:
 
 *   **👨‍💻 Interactive TUI (Text-based UI):** A polished, menu-driven interface for easy navigation and operation.
 *   **📶 Wi-Fi Management:**
@@ -58,7 +58,7 @@ Wifade is a modern, terminal-based WiFi manager with an integrated brute-forcer 
     *   **Custom Wordlists:** Select and use your own custom password files for targeted testing.
 *   **⚡️ Quick CLI Actions:** Bypass the interactive UI for instant results. Use flags to get your IP, scan networks, check status, and more.
 
-*Linux and macOS support is planned and in development. Stay tuned for cross-platform releases!*
+*Cross-platform: Now available on both Windows and Linux! macOS support is in development.*
 
 ## `>_` 📸 Screenshots
 
@@ -98,16 +98,64 @@ Wifade is a modern, terminal-based WiFi manager with an integrated brute-forcer 
 </table>
 
 
-## `>_` 📦 Installation (Windows)
+## `>_` 📦 Installation
+
+### Windows
 
 1. Go to the [**GitHub Releases**](https://github.com/anonfaded/wifade/releases) page.
 2. Download the latest `WifadeSetup-X.X.exe` installer.
 3. Run the installer. It requires administrator privileges to add `wifade` to your system's PATH.
 4. Once installed, you can open any terminal and run the `wifade` command, or launch Wifade via the Start Menu or desktop shortcut.
 
-*Linux and macOS installation instructions will be provided when those versions are released.*
+### Linux
 
-## `>_` 🖥️ Usage (Windows)
+**Requirements:**
+- PowerShell Core 7.x (`pwsh`)
+- `ip` command (iproute2 package)
+- `iwconfig` command (wireless-tools package)
+- `nmcli` command (NetworkManager)
+
+**Installation from source:**
+
+```bash
+# Install PowerShell Core if not already installed
+# For Ubuntu/Debian:
+sudo apt-get update
+sudo apt-get install -y powershell
+
+# For RHEL/Fedora:
+sudo dnf install -y powershell
+
+# Install required wireless tools
+sudo apt-get install -y wireless-tools iproute2 network-manager  # Ubuntu/Debian
+# or
+sudo dnf install -y wireless-tools iproute NetworkManager  # RHEL/Fedora
+
+# Clone the repository
+git clone https://github.com/anonfaded/wifade.git
+cd wifade
+
+# Run wifade (requires sudo for network operations)
+sudo pwsh ./Wifade.ps1
+```
+
+**Optional: Install to system path:**
+```bash
+# Create installation directory
+sudo mkdir -p /opt/wifade
+
+# Copy files
+sudo cp -r * /opt/wifade/
+
+# Create symbolic link
+sudo ln -s /opt/wifade/Wifade.ps1 /usr/local/bin/wifade
+sudo chmod +x /usr/local/bin/wifade
+
+# Now you can run wifade from anywhere
+sudo wifade
+```
+
+## `>_` 🖥️ Usage
 
 Wifade can be launched in two modes: Interactive Mode for a full user interface, or CLI Mode for quick, direct commands.
 
