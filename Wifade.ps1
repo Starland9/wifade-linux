@@ -258,6 +258,8 @@ if (-not (Test-Path $finalClassesPath)) {
 }
 
 # Import required classes and modules using cross-platform paths
+# Note: VersionChecker must be loaded first to define $Script:WIFADE_VERSION
+. ([IO.Path]::Combine($global:AppRoot, "Classes", "VersionChecker.ps1"))
 . ([IO.Path]::Combine($global:AppRoot, "Classes", "BaseClasses.ps1"))
 . ([IO.Path]::Combine($global:AppRoot, "Classes", "DataModels.ps1"))
 . ([IO.Path]::Combine($global:AppRoot, "Classes", "ConfigurationManager.ps1"))
@@ -265,10 +267,9 @@ if (-not (Test-Path $finalClassesPath)) {
 . ([IO.Path]::Combine($global:AppRoot, "Classes", "PasswordManager.ps1"))
 . ([IO.Path]::Combine($global:AppRoot, "Classes", "SettingsManager.ps1"))
 . ([IO.Path]::Combine($global:AppRoot, "Classes", "UIManager.ps1"))
-. ([IO.Path]::Combine($global:AppRoot, "Classes", "VersionChecker.ps1"))
 . ([IO.Path]::Combine($global:AppRoot, "Classes", "ApplicationController.ps1"))
 
-# Application constants
+# Application constants (now that version is loaded)
 $Script:APP_NAME = "wifade"
 $Script:APP_VERSION = $Script:WIFADE_VERSION  # Use version from VersionChecker
 $Script:APP_DESCRIPTION = "Cross-Platform PowerShell Wi-Fi Security Testing Tool (Windows/Linux)"

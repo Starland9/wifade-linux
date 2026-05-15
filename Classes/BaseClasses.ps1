@@ -23,32 +23,36 @@ class WifadeException : System.Exception {
 
 # Network-related exceptions
 class NetworkException : WifadeException {
-    [string]$AdapterName
-    [string]$NetworkSSID
-    
+    [string]$AdapterName = ""
+    [string]$NetworkSSID = ""
+
     NetworkException([string]$message) : base($message) {}
-    
+
     NetworkException([string]$message, [string]$adapterName) : base($message) {
         $this.AdapterName = $adapterName
     }
-    
+
     NetworkException([string]$message, [string]$adapterName, [string]$ssid) : base($message) {
         $this.AdapterName = $adapterName
         $this.NetworkSSID = $ssid
     }
+
+    NetworkException([string]$message, [System.Exception]$innerException) : base($message, $innerException) {}
 }
 
 # Configuration-related exceptions
 class ConfigurationException : WifadeException {
-    [string]$ConfigurationItem
-    [string]$FilePath
-    
+    [string]$ConfigurationItem = ""
+    [string]$FilePath = ""
+
     ConfigurationException([string]$message) : base($message) {}
-    
+
     ConfigurationException([string]$message, [string]$configItem) : base($message) {
         $this.ConfigurationItem = $configItem
     }
-    
+
+    ConfigurationException([string]$message, [System.Exception]$innerException) : base($message, $innerException) {}
+
     ConfigurationException([string]$message, [string]$configItem, [string]$filePath) : base($message) {
         $this.ConfigurationItem = $configItem
         $this.FilePath = $filePath
@@ -57,18 +61,18 @@ class ConfigurationException : WifadeException {
 
 # Security and ethical usage exceptions
 class SecurityException : WifadeException {
-    [string]$ViolationType
-    [hashtable]$SecurityContext
-    
+    [string]$ViolationType = ""
+    [hashtable]$SecurityContext = @{}
+
     SecurityException([string]$message) : base($message) {
         $this.SecurityContext = @{}
     }
-    
+
     SecurityException([string]$message, [string]$violationType) : base($message) {
         $this.ViolationType = $violationType
         $this.SecurityContext = @{}
     }
-    
+
     SecurityException([string]$message, [string]$violationType, [hashtable]$context) : base($message) {
         $this.ViolationType = $violationType
         $this.SecurityContext = $context
