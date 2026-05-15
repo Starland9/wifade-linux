@@ -52,7 +52,7 @@ param(
     
     [Parameter(Mandatory = $false, HelpMessage = "Path to password file")]
     [Alias("w")]
-    [string]$PasswordFile = "passwords\probable-v2-wpa-top4800.txt",
+    [string]$PasswordFile = ([IO.Path]::Combine("passwords", "probable-v2-wpa-top4800.txt")),
     
     [Parameter(Mandatory = $false, HelpMessage = "Display help information")]
     [Alias("h")]
@@ -189,58 +189,84 @@ else {
 
 
 
-# Establish application root path - HARDCODED for reliable operation
-# Since we enforce installation to C:\Program Files\Wifade, use that as primary path
-$global:AppRoot = "C:\Program Files\Wifade"
+# Establish application root path - Cross-platform compatible
+# Detect the OS and set appropriate default installation path
+$isWindowsOS = [System.Environment]::OSVersion.Platform -eq [System.PlatformID]::Win32NT
 
-# For development/testing, fall back to script location if hardcoded path doesn't exist
-if (-not (Test-Path "$global:AppRoot\Classes")) {
-    Write-Verbose "[DEBUG] Hardcoded path not found, trying script-based paths for development..."
-    
-    if ($PSScriptRoot -and (Test-Path "$PSScriptRoot\Classes")) {
-        $global:AppRoot = $PSScriptRoot
-        Write-Verbose "[DEBUG] Using PSScriptRoot: '$global:AppRoot'"
-    } elseif ($MyInvocation.MyCommand.Path) {
-        $tempPath = Split-Path -Parent $MyInvocation.MyCommand.Path
-        if (Test-Path "$tempPath\Classes") {
-            $global:AppRoot = $tempPath
-            Write-Verbose "[DEBUG] Using MyInvocation path: '$global:AppRoot'"
-        }
+if ($isWindowsOS) {
+    # Windows: C:\Program Files\Wifade or user profile
+    $global:AppRoot = [IO.Path]::Combine("C:", "Program Files", "Wifade")
+} else {
+    # Linux/Unix: /opt/wifade or ~/.local/share/wifade
+    if (Test-Path "/opt/wifade") {
+        $global:AppRoot = "/opt/wifade"
     } else {
+        $global:AppRoot = [IO.Path]::Combine($env:HOME, ".local", "share", "wifade")
+    }
+}
+
+# For development/testing, fall back to script location if installation path doesn't exist
+$classesPath = [IO.Path]::Combine($global:AppRoot, "Classes")
+if (-not (Test-Path $classesPath)) {
+    Write-Verbose "[DEBUG] Installation path not found, trying script-based paths for development..."
+
+    if ($PSScriptRoot) {
+        $devClassesPath = [IO.Path]::Combine($PSScriptRoot, "Classes")
+        if (Test-Path $devClassesPath) {
+            $global:AppRoot = $PSScriptRoot
+            Write-Verbose "[DEBUG] Using PSScriptRoot: '$global:AppRoot'"
+        }
+    }
+
+    if (-not $global:AppRoot -or -not (Test-Path ([IO.Path]::Combine($global:AppRoot, "Classes")))) {
+        if ($MyInvocation.MyCommand.Path) {
+            $tempPath = Split-Path -Parent $MyInvocation.MyCommand.Path
+            $tempClassesPath = [IO.Path]::Combine($tempPath, "Classes")
+            if (Test-Path $tempClassesPath) {
+                $global:AppRoot = $tempPath
+                Write-Verbose "[DEBUG] Using MyInvocation path: '$global:AppRoot'"
+            }
+        }
+    }
+
+    if (-not $global:AppRoot -or -not (Test-Path ([IO.Path]::Combine($global:AppRoot, "Classes")))) {
         # Final fallback for development
         $currentPath = (Get-Location).Path
-        if (Test-Path "$currentPath\Classes") {
+        $currentClassesPath = [IO.Path]::Combine($currentPath, "Classes")
+        if (Test-Path $currentClassesPath) {
             $global:AppRoot = $currentPath
             Write-Verbose "[DEBUG] Using current directory: '$global:AppRoot'"
         }
     }
 } else {
-    Write-Verbose "[DEBUG] Using hardcoded installation path: '$global:AppRoot'"
+    Write-Verbose "[DEBUG] Using installation path: '$global:AppRoot'"
 }
-
-# Clean up the path
-$global:AppRoot = $global:AppRoot.TrimEnd('\').TrimEnd('/')
 
 Write-Verbose "[DEBUG] Final AppRoot resolved to: '$global:AppRoot'"
 
 # Validate that we can find the Classes directory
-if (-not (Test-Path "$global:AppRoot\Classes")) {
-    Write-Host "[ERROR] Classes directory not found at '$global:AppRoot\Classes'" -ForegroundColor Red
-    Write-Host "[DEBUG] Expected installation path: C:\Program Files\Wifade" -ForegroundColor Yellow
+$finalClassesPath = [IO.Path]::Combine($global:AppRoot, "Classes")
+if (-not (Test-Path $finalClassesPath)) {
+    Write-Host "[ERROR] Classes directory not found at '$finalClassesPath'" -ForegroundColor Red
+    if ($isWindowsOS) {
+        Write-Host "[DEBUG] Expected installation path: C:\Program Files\Wifade" -ForegroundColor Yellow
+    } else {
+        Write-Host "[DEBUG] Expected installation paths: /opt/wifade or ~/.local/share/wifade" -ForegroundColor Yellow
+    }
     Write-Host "[DEBUG] Please ensure Wifade is properly installed or run from source directory" -ForegroundColor Yellow
     throw "Classes directory not found. AppRoot was resolved to: '$global:AppRoot'"
 }
 
-# Import required classes and modules using the new global path
-. "$global:AppRoot\Classes\BaseClasses.ps1"
-. "$global:AppRoot\Classes\DataModels.ps1"
-. "$global:AppRoot\Classes\ConfigurationManager.ps1"
-. "$global:AppRoot\Classes\NetworkManager.ps1"
-. "$global:AppRoot\Classes\PasswordManager.ps1"
-. "$global:AppRoot\Classes\SettingsManager.ps1"
-. "$global:AppRoot\Classes\UIManager.ps1"
-. "$global:AppRoot\Classes\VersionChecker.ps1"
-. "$global:AppRoot\Classes\ApplicationController.ps1"
+# Import required classes and modules using cross-platform paths
+. ([IO.Path]::Combine($global:AppRoot, "Classes", "BaseClasses.ps1"))
+. ([IO.Path]::Combine($global:AppRoot, "Classes", "DataModels.ps1"))
+. ([IO.Path]::Combine($global:AppRoot, "Classes", "ConfigurationManager.ps1"))
+. ([IO.Path]::Combine($global:AppRoot, "Classes", "NetworkManager.ps1"))
+. ([IO.Path]::Combine($global:AppRoot, "Classes", "PasswordManager.ps1"))
+. ([IO.Path]::Combine($global:AppRoot, "Classes", "SettingsManager.ps1"))
+. ([IO.Path]::Combine($global:AppRoot, "Classes", "UIManager.ps1"))
+. ([IO.Path]::Combine($global:AppRoot, "Classes", "VersionChecker.ps1"))
+. ([IO.Path]::Combine($global:AppRoot, "Classes", "ApplicationController.ps1"))
 
 # Application constants
 $Script:APP_NAME = "wifade"
@@ -807,7 +833,7 @@ function Show-ParameterList {
     Write-Host "📚 BUILT-IN WORDLIST:" -ForegroundColor Blue
     Write-Host "│   " -ForegroundColor Red -NoNewline
     Write-Host "Default wordlist: " -ForegroundColor White -NoNewline
-    Write-Host "passwords\probable-v2-wpa-top4800.txt" -ForegroundColor Red -NoNewline
+    Write-Host ([IO.Path]::Combine("passwords", "probable-v2-wpa-top4800.txt")) -ForegroundColor Red -NoNewline
     Write-Host " (4700+ common passwords)" -ForegroundColor White
     Write-Host "│   " -ForegroundColor Red -NoNewline
     Write-Host "Custom wordlists can be selected through the interactive Attack Mode menu" -ForegroundColor White
@@ -989,7 +1015,7 @@ function Show-Help {
     Write-Host "📚 BUILT-IN WORDLIST:" -ForegroundColor Blue
     Write-Host "│    " -ForegroundColor Red -NoNewline
     Write-Host "Default wordlist: " -ForegroundColor White -NoNewline
-    Write-Host "passwords\probable-v2-wpa-top4800.txt" -ForegroundColor Red
+    Write-Host ([IO.Path]::Combine("passwords", "probable-v2-wpa-top4800.txt")) -ForegroundColor Red
     Write-Host "│    " -ForegroundColor Red -NoNewline
     Write-Host "Contains 4700+ most common Wi-Fi passwords for effective dictionary attacks" -ForegroundColor White
     Write-Host "│" -ForegroundColor Red

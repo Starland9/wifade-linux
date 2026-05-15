@@ -1264,8 +1264,16 @@ class ApplicationController {
             # Get custom password file path with detailed instructions
             Write-Host "Password File Path Options:" -ForegroundColor $this.UIManager.ColorScheme.Primary
             Write-Host "• Type 'browse' to open file picker dialog" -ForegroundColor $this.UIManager.ColorScheme.Secondary
-            Write-Host "• Enter full path: C:\Users\YourName\Documents\passwords.txt" -ForegroundColor $this.UIManager.ColorScheme.Secondary
-            Write-Host "• Enter relative path: passwords\my-wordlist.txt" -ForegroundColor $this.UIManager.ColorScheme.Secondary
+
+            # Show OS-appropriate path examples
+            $isWindowsOS = [System.Environment]::OSVersion.Platform -eq [System.PlatformID]::Win32NT
+            if ($isWindowsOS) {
+                Write-Host "• Enter full path: C:\Users\YourName\Documents\passwords.txt" -ForegroundColor $this.UIManager.ColorScheme.Secondary
+                Write-Host "• Enter relative path: passwords\my-wordlist.txt" -ForegroundColor $this.UIManager.ColorScheme.Secondary
+            } else {
+                Write-Host "• Enter full path: /home/yourusername/Documents/passwords.txt" -ForegroundColor $this.UIManager.ColorScheme.Secondary
+                Write-Host "• Enter relative path: passwords/my-wordlist.txt" -ForegroundColor $this.UIManager.ColorScheme.Secondary
+            }
             Write-Host "• Press Enter to cancel" -ForegroundColor $this.UIManager.ColorScheme.Secondary
             Write-Host ""
             
@@ -1606,9 +1614,18 @@ class ApplicationController {
             $this.UIManager.ShowWarning("File picker not available. Please enter the file path manually.")
             Write-Host ""
             Write-Host "File Path Examples:" -ForegroundColor $this.UIManager.ColorScheme.Info
-            Write-Host "• Full path: C:\Users\$env:USERNAME\Documents\passwords.txt" -ForegroundColor $this.UIManager.ColorScheme.Secondary
-            Write-Host "• Relative path: passwords\my-wordlist.txt" -ForegroundColor $this.UIManager.ColorScheme.Secondary
-            Write-Host "• Current directory: .\my-passwords.txt" -ForegroundColor $this.UIManager.ColorScheme.Secondary
+
+            # Show OS-appropriate path examples
+            $isWindowsOS = [System.Environment]::OSVersion.Platform -eq [System.PlatformID]::Win32NT
+            if ($isWindowsOS) {
+                Write-Host "• Full path: C:\Users\$env:USERNAME\Documents\passwords.txt" -ForegroundColor $this.UIManager.ColorScheme.Secondary
+                Write-Host "• Relative path: passwords\my-wordlist.txt" -ForegroundColor $this.UIManager.ColorScheme.Secondary
+                Write-Host "• Current directory: .\my-passwords.txt" -ForegroundColor $this.UIManager.ColorScheme.Secondary
+            } else {
+                Write-Host "• Full path: $env:HOME/Documents/passwords.txt" -ForegroundColor $this.UIManager.ColorScheme.Secondary
+                Write-Host "• Relative path: passwords/my-wordlist.txt" -ForegroundColor $this.UIManager.ColorScheme.Secondary
+                Write-Host "• Current directory: ./my-passwords.txt" -ForegroundColor $this.UIManager.ColorScheme.Secondary
+            }
             Write-Host ""
             
             $manualPath = $this.UIManager.GetUserInput("Enter password file path", "", "")
