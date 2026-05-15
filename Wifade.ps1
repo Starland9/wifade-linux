@@ -276,17 +276,65 @@ $Script:APP_DESCRIPTION = "Windows PowerShell Wi-Fi Security Testing Tool"
 function Get-WiFiPrivateIP {
     <#
     .SYNOPSIS
-        Get the current Wi-Fi private IP address
+        Get the current Wi-Fi private IP address (cross-platform)
     #>
-    
+
     try {
-        # Get Wi-Fi adapter IP configuration
-        $ipConfig = Get-NetIPConfiguration -InterfaceAlias "Wi-Fi*" -ErrorAction SilentlyContinue | Where-Object { $_.IPv4Address -and $_.NetProfile.IPv4Connectivity -eq "Internet" } | Select-Object -First 1
-        
-        if ($ipConfig -and $ipConfig.IPv4Address) {
-            return $ipConfig.IPv4Address.IPAddress
+        $isWindowsOS = [System.Environment]::OSVersion.Platform -eq [System.PlatformID]::Win32NT
+
+        if ($isWindowsOS) {
+            # Windows: Use Get-NetIPConfiguration
+            $ipConfig = Get-NetIPConfiguration -InterfaceAlias "Wi-Fi*" -ErrorAction SilentlyContinue | Where-Object { $_.IPv4Address -and $_.NetProfile.IPv4Connectivity -eq "Internet" } | Select-Object -First 1
+
+            if ($ipConfig -and $ipConfig.IPv4Address) {
+                return $ipConfig.IPv4Address.IPAddress
+            }
+            return $null
         }
         else {
+            # Linux: Use ip command or parse /proc/net files
+            # Try to find wireless interface
+            $wifiInterface = $null
+
+            # Method 1: Check /proc/net/wireless
+            if (Test-Path "/proc/net/wireless") {
+                $wirelessContent = Get-Content "/proc/net/wireless" -ErrorAction SilentlyContinue
+                foreach ($line in $wirelessContent) {
+                    if ($line -match '^\s*(\w+)\:') {
+                        $interfaceName = $matches[1].Trim()
+                        if ($interfaceName -ne "Inter" -and $interfaceName -ne "face") {
+                            $wifiInterface = $interfaceName
+                            break
+                        }
+                    }
+                }
+            }
+
+            # Method 2: Use ip command if available
+            if (-not $wifiInterface) {
+                $ipOutput = & ip link show 2>$null
+                if ($ipOutput) {
+                    foreach ($line in $ipOutput) {
+                        if ($line -match '^\d+\:\s*(\w+)\:' -and $matches[1] -match "^(wlan|wlp|wlo|wifi)") {
+                            $wifiInterface = $matches[1]
+                            break
+                        }
+                    }
+                }
+            }
+
+            if ($wifiInterface) {
+                # Get IP address for the interface
+                $ipAddrOutput = & ip -4 addr show $wifiInterface 2>$null
+                if ($ipAddrOutput) {
+                    foreach ($line in $ipAddrOutput) {
+                        if ($line -match 'inet\s+(\d+\.\d+\.\d+\.\d+)') {
+                            return $matches[1]
+                        }
+                    }
+                }
+            }
+
             return $null
         }
     }
@@ -313,16 +361,32 @@ function Get-WiFiPublicIP {
 function Get-WiFiGateway {
     <#
     .SYNOPSIS
-        Get the default gateway IP address
+        Get the default gateway IP address (cross-platform)
     #>
-    
+
     try {
-        $ipConfig = Get-NetIPConfiguration -InterfaceAlias "Wi-Fi*" -ErrorAction SilentlyContinue | Where-Object { $_.IPv4Address -and $_.NetProfile.IPv4Connectivity -eq "Internet" } | Select-Object -First 1
-        
-        if ($ipConfig -and $ipConfig.IPv4DefaultGateway) {
-            return $ipConfig.IPv4DefaultGateway.NextHop
+        $isWindowsOS = [System.Environment]::OSVersion.Platform -eq [System.PlatformID]::Win32NT
+
+        if ($isWindowsOS) {
+            # Windows: Use Get-NetIPConfiguration
+            $ipConfig = Get-NetIPConfiguration -InterfaceAlias "Wi-Fi*" -ErrorAction SilentlyContinue | Where-Object { $_.IPv4Address -and $_.NetProfile.IPv4Connectivity -eq "Internet" } | Select-Object -First 1
+
+            if ($ipConfig -and $ipConfig.IPv4DefaultGateway) {
+                return $ipConfig.IPv4DefaultGateway.NextHop
+            }
+            return $null
         }
         else {
+            # Linux: Use ip route command
+            $routeOutput = & ip route show default 2>$null
+            if ($routeOutput) {
+                # Parse default route line: "default via 192.168.1.1 dev wlan0 ..."
+                foreach ($line in $routeOutput) {
+                    if ($line -match 'default\s+via\s+(\d+\.\d+\.\d+\.\d+)') {
+                        return $matches[1]
+                    }
+                }
+            }
             return $null
         }
     }
@@ -334,19 +398,60 @@ function Get-WiFiGateway {
 function Get-WiFiDNS {
     <#
     .SYNOPSIS
-        Get the DNS servers
+        Get the DNS servers (cross-platform)
     #>
-    
+
     try {
-        $ipConfig = Get-NetIPConfiguration -InterfaceAlias "Wi-Fi*" -ErrorAction SilentlyContinue | Where-Object { $_.IPv4Address -and $_.NetProfile.IPv4Connectivity -eq "Internet" } | Select-Object -First 1
-        
-        if ($ipConfig -and $ipConfig.DNSServer) {
-            $dnsServers = $ipConfig.DNSServer | Where-Object { $_.AddressFamily -eq 2 } | Select-Object -ExpandProperty ServerAddresses
-            if ($dnsServers) {
+        $isWindowsOS = [System.Environment]::OSVersion.Platform -eq [System.PlatformID]::Win32NT
+
+        if ($isWindowsOS) {
+            # Windows: Use Get-NetIPConfiguration
+            $ipConfig = Get-NetIPConfiguration -InterfaceAlias "Wi-Fi*" -ErrorAction SilentlyContinue | Where-Object { $_.IPv4Address -and $_.NetProfile.IPv4Connectivity -eq "Internet" } | Select-Object -First 1
+
+            if ($ipConfig -and $ipConfig.DNSServer) {
+                $dnsServers = $ipConfig.DNSServer | Where-Object { $_.AddressFamily -eq 2 } | Select-Object -ExpandProperty ServerAddresses
+                if ($dnsServers) {
+                    return $dnsServers -join ', '
+                }
+            }
+            return $null
+        }
+        else {
+            # Linux: Parse /etc/resolv.conf or use systemd-resolve
+            $dnsServers = @()
+
+            # Method 1: Check /etc/resolv.conf
+            if (Test-Path "/etc/resolv.conf") {
+                $resolvContent = Get-Content "/etc/resolv.conf" -ErrorAction SilentlyContinue
+                foreach ($line in $resolvContent) {
+                    if ($line -match '^\s*nameserver\s+(\d+\.\d+\.\d+\.\d+)') {
+                        $dnsServers += $matches[1]
+                    }
+                }
+            }
+
+            # Method 2: Try systemd-resolve (if available)
+            if ($dnsServers.Count -eq 0) {
+                try {
+                    $resolveOutput = & systemd-resolve --status 2>$null
+                    if ($resolveOutput) {
+                        foreach ($line in $resolveOutput) {
+                            if ($line -match 'DNS Servers:\s+(\d+\.\d+\.\d+\.\d+)') {
+                                $dnsServers += $matches[1]
+                            }
+                        }
+                    }
+                }
+                catch {
+                    # systemd-resolve not available
+                }
+            }
+
+            if ($dnsServers.Count -gt 0) {
                 return $dnsServers -join ', '
             }
+            return $null
         }
-        return $null
     }
     catch {
         return $null
@@ -356,15 +461,58 @@ function Get-WiFiDNS {
 function Get-WiFiMAC {
     <#
     .SYNOPSIS
-        Get the Wi-Fi adapter MAC address
+        Get the Wi-Fi adapter MAC address (cross-platform)
     #>
-    
+
     try {
-        $adapter = Get-NetAdapter -InterfaceAlias "Wi-Fi*" | Where-Object { $_.Status -eq "Up" } | Select-Object -First 1
-        if ($adapter) {
-            return $adapter.MacAddress
+        $isWindowsOS = [System.Environment]::OSVersion.Platform -eq [System.PlatformID]::Win32NT
+
+        if ($isWindowsOS) {
+            # Windows: Use Get-NetAdapter
+            $adapter = Get-NetAdapter -InterfaceAlias "Wi-Fi*" | Where-Object { $_.Status -eq "Up" } | Select-Object -First 1
+            if ($adapter) {
+                return $adapter.MacAddress
+            }
+            return $null
         }
-        return $null
+        else {
+            # Linux: Find wireless interface and get MAC
+            $wifiInterface = $null
+
+            # Find wireless interface
+            if (Test-Path "/proc/net/wireless") {
+                $wirelessContent = Get-Content "/proc/net/wireless" -ErrorAction SilentlyContinue
+                foreach ($line in $wirelessContent) {
+                    if ($line -match '^\s*(\w+)\:') {
+                        $interfaceName = $matches[1].Trim()
+                        if ($interfaceName -ne "Inter" -and $interfaceName -ne "face") {
+                            $wifiInterface = $interfaceName
+                            break
+                        }
+                    }
+                }
+            }
+
+            if ($wifiInterface) {
+                # Get MAC address from ip command or /sys
+                $macFile = "/sys/class/net/$wifiInterface/address"
+                if (Test-Path $macFile) {
+                    $mac = Get-Content $macFile -ErrorAction SilentlyContinue
+                    return $mac.Trim()
+                }
+
+                # Fallback: Use ip command
+                $ipOutput = & ip link show $wifiInterface 2>$null
+                if ($ipOutput) {
+                    foreach ($line in $ipOutput) {
+                        if ($line -match 'link/ether\s+([0-9a-f:]{17})') {
+                            return $matches[1]
+                        }
+                    }
+                }
+            }
+            return $null
+        }
     }
     catch {
         return $null
@@ -374,15 +522,70 @@ function Get-WiFiMAC {
 function Get-WiFiSpeed {
     <#
     .SYNOPSIS
-        Get the Wi-Fi connection speed
+        Get the Wi-Fi connection speed (cross-platform)
     #>
-    
+
     try {
-        $adapter = Get-NetAdapter -InterfaceAlias "Wi-Fi*" | Where-Object { $_.Status -eq "Up" } | Select-Object -First 1
-        if ($adapter) {
-            return $adapter.LinkSpeed
+        $isWindowsOS = [System.Environment]::OSVersion.Platform -eq [System.PlatformID]::Win32NT
+
+        if ($isWindowsOS) {
+            # Windows: Use Get-NetAdapter
+            $adapter = Get-NetAdapter -InterfaceAlias "Wi-Fi*" | Where-Object { $_.Status -eq "Up" } | Select-Object -First 1
+            if ($adapter) {
+                return $adapter.LinkSpeed
+            }
+            return $null
         }
-        return $null
+        else {
+            # Linux: Use iwconfig or /sys to get link speed
+            $wifiInterface = $null
+
+            # Find wireless interface
+            if (Test-Path "/proc/net/wireless") {
+                $wirelessContent = Get-Content "/proc/net/wireless" -ErrorAction SilentlyContinue
+                foreach ($line in $wirelessContent) {
+                    if ($line -match '^\s*(\w+)\:') {
+                        $interfaceName = $matches[1].Trim()
+                        if ($interfaceName -ne "Inter" -and $interfaceName -ne "face") {
+                            $wifiInterface = $interfaceName
+                            break
+                        }
+                    }
+                }
+            }
+
+            if ($wifiInterface) {
+                # Try iwconfig first (more accurate for Wi-Fi)
+                try {
+                    $iwconfigOutput = & iwconfig $wifiInterface 2>$null
+                    if ($iwconfigOutput) {
+                        foreach ($line in $iwconfigOutput) {
+                            if ($line -match 'Bit Rate[=:](\d+\.?\d*)\s*(Mb/s|Gb/s)') {
+                                $speed = $matches[1]
+                                $unit = $matches[2]
+                                if ($unit -eq "Gb/s") {
+                                    $speed = [double]$speed * 1000
+                                }
+                                return "$speed Mbps"
+                            }
+                        }
+                    }
+                }
+                catch {
+                    # iwconfig not available
+                }
+
+                # Fallback: Check /sys/class/net/*/speed
+                $speedFile = "/sys/class/net/$wifiInterface/speed"
+                if (Test-Path $speedFile) {
+                    $speed = Get-Content $speedFile -ErrorAction SilentlyContinue
+                    if ($speed -and $speed -ne "-1") {
+                        return "$speed Mbps"
+                    }
+                }
+            }
+            return $null
+        }
     }
     catch {
         return $null
@@ -589,39 +792,82 @@ function Get-WiFiNetworks {
 function Restart-WiFiAdapter {
     <#
     .SYNOPSIS
-        Restart the Wi-Fi adapter
+        Restart the Wi-Fi adapter (cross-platform)
     #>
-    
+
     try {
         Write-Host "Restarting Wi-Fi adapter..." -ForegroundColor Yellow
-        
-        # Get Wi-Fi adapter
-        $adapter = Get-NetAdapter -InterfaceAlias "Wi-Fi*" | Where-Object { $_.Status -eq "Up" } | Select-Object -First 1
-        if (-not $adapter) {
-            Write-Host "No active Wi-Fi adapter found" -ForegroundColor Red
-            return $false
+
+        $isWindowsOS = [System.Environment]::OSVersion.Platform -eq [System.PlatformID]::Win32NT
+
+        if ($isWindowsOS) {
+            # Windows: Use Get-NetAdapter
+            $adapter = Get-NetAdapter -InterfaceAlias "Wi-Fi*" | Where-Object { $_.Status -eq "Up" } | Select-Object -First 1
+            if (-not $adapter) {
+                Write-Host "No active Wi-Fi adapter found" -ForegroundColor Red
+                return $false
+            }
+
+            $adapterName = $adapter.Name
+            Write-Host "Found adapter: $adapterName" -ForegroundColor Green
+
+            # Try to restart using different methods
+            try {
+                Disable-NetAdapter -Name $adapterName -Confirm:$false -ErrorAction Stop
+                Start-Sleep -Seconds 3
+                Enable-NetAdapter -Name $adapterName -Confirm:$false -ErrorAction Stop
+                Start-Sleep -Seconds 5
+                Write-Host "Wi-Fi adapter restarted successfully" -ForegroundColor Green
+                return $true
+            }
+            catch {
+                Write-Host "Admin privileges required. Trying alternative method..." -ForegroundColor Yellow
+                & netsh interface set interface name="$adapterName" admin=disabled 2>&1 | Out-Null
+                Start-Sleep -Seconds 3
+                & netsh interface set interface name="$adapterName" admin=enabled 2>&1 | Out-Null
+                Start-Sleep -Seconds 5
+                Write-Host "Wi-Fi adapter restart attempted" -ForegroundColor Green
+                return $true
+            }
         }
-        
-        $adapterName = $adapter.Name
-        Write-Host "Found adapter: $adapterName" -ForegroundColor Green
-        
-        # Try to restart using different methods
-        try {
-            Disable-NetAdapter -Name $adapterName -Confirm:$false -ErrorAction Stop
-            Start-Sleep -Seconds 3
-            Enable-NetAdapter -Name $adapterName -Confirm:$false -ErrorAction Stop
-            Start-Sleep -Seconds 5
-            Write-Host "Wi-Fi adapter restarted successfully" -ForegroundColor Green
-            return $true
-        }
-        catch {
-            Write-Host "Admin privileges required. Trying alternative method..." -ForegroundColor Yellow
-            & netsh interface set interface name="$adapterName" admin=disabled 2>&1 | Out-Null
-            Start-Sleep -Seconds 3
-            & netsh interface set interface name="$adapterName" admin=enabled 2>&1 | Out-Null
-            Start-Sleep -Seconds 5
-            Write-Host "Wi-Fi adapter restart attempted" -ForegroundColor Green
-            return $true
+        else {
+            # Linux: Find wireless interface and restart
+            $wifiInterface = $null
+
+            # Find wireless interface
+            if (Test-Path "/proc/net/wireless") {
+                $wirelessContent = Get-Content "/proc/net/wireless" -ErrorAction SilentlyContinue
+                foreach ($line in $wirelessContent) {
+                    if ($line -match '^\s*(\w+)\:') {
+                        $interfaceName = $matches[1].Trim()
+                        if ($interfaceName -ne "Inter" -and $interfaceName -ne "face") {
+                            $wifiInterface = $interfaceName
+                            break
+                        }
+                    }
+                }
+            }
+
+            if (-not $wifiInterface) {
+                Write-Host "No active Wi-Fi interface found" -ForegroundColor Red
+                return $false
+            }
+
+            Write-Host "Found interface: $wifiInterface" -ForegroundColor Green
+
+            # Try using ip command
+            try {
+                & ip link set $wifiInterface down 2>&1 | Out-Null
+                Start-Sleep -Seconds 3
+                & ip link set $wifiInterface up 2>&1 | Out-Null
+                Start-Sleep -Seconds 5
+                Write-Host "Wi-Fi interface restarted successfully" -ForegroundColor Green
+                return $true
+            }
+            catch {
+                Write-Host "Failed to restart interface. You may need elevated privileges (sudo)" -ForegroundColor Red
+                return $false
+            }
         }
     }
     catch {
